@@ -1,0 +1,147 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import csv
+import os
+
+# 크롬 옵션 설정 (프로필 경로)
+options = Options()
+options.add_argument("user-data-dir=C:\\Users\\hsh\\AppData\\Local\\Google\\Chrome\\User Data")  # ← 너의 경로로 바꿔
+options.add_argument("profile-directory=Default")  # 혹은 'Profile 1', 'Profile 2' 등
+
+# 크롬 드라이버 실행 (자동 로그인 됨)
+driver = webdriver.Chrome(options=options)
+
+# 원하는 사이트 접속 (알리 실시간 주문 정보)
+driver.get("https://example.com")  # ← 자동 로그인 되는 사이트로 바꿔
+
+# 알리 링크 변환기
+driver.execute_script("window.open('https://example.com')")
+
+# T 스토리
+driver.execute_script("window.open('https://example.com')")
+
+# 유튜브 커뮤니티
+driver.execute_script("window.open('https://example.com')")
+
+# 페이지 로딩 대기 (WebDriverWait으로 대체 가능)
+wait = WebDriverWait(driver, 10)  # 최대 10초 대기
+
+# 실시간 주문 정보로 들어갈 수 있도록 클릭
+btn1 = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="btn1"]')))
+btn1.click() 
+
+btn2 = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="btn2"]')))
+btn2.click()
+
+# 첫 번째 창으로 이동
+driver.switch_to.window(driver.window_handles[0])
+
+filename = 'num.csv'
+
+# CSV에서 이미 저장된 값 읽기 (첫번째 컬럼 기준)
+existing_values = set()
+if os.path.exists(filename):
+    with open(filename, newline='', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if row:
+                existing_values.add(row[0])
+
+row_index = 1
+new_page_url = None  # 여기에 new_page_url 초기화
+
+while True:
+    try:
+        # 특정 XPath (예: 상품명이나 고유값 위치)
+        value_xpath = f'/html/body/div/div/div[3]/div/div/div[2]/div/div/div[2]/table/tbody/tr[{row_index}]/td[2]/div/span'
+        value_element = wait.until(EC.presence_of_element_located((By.XPATH, value_xpath)))
+        value_text = value_element.text.strip()
+
+        if value_text not in existing_values:
+            # 가격 추출 (예: td[10]/div/span)
+            price_xpath = f'/html/body/div/div/div[3]/div/div/div[2]/div/div/div[2]/table/tbody/tr[{row_index}]/td[10]/div/span'
+            price_element = driver.find_element(By.XPATH, price_xpath)
+            price_text = price_element.text.strip()
+            price = float(''.join(filter(lambda x: x.isdigit() or x == '.', price_text)))
+
+            if price >= 10:
+                with open(filename, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow([value_text, price])
+                existing_values.add(value_text)
+                print(f"저장됨: {value_text} 가격: {price}")
+
+                # 가격 조건 만족 시, 특정 XPath 버튼 클릭 추가
+                click_xpath = f'/html/body/div/div/div[3]/div/div/div[2]/div/div/div[2]/table/tbody/tr[{row_index}]/td[5]/button'  # 예시
+                button = wait.until(EC.element_to_be_clickable((By.XPATH, click_xpath)))
+                button.click()
+                print(f"{row_index}번 행 버튼 클릭 완료")
+
+                # 새 창(탭) 핸들 저장
+                current_handle = driver.current_window_handle
+                handles = driver.window_handles
+
+                # 새 창 핸들 찾기
+                new_handle = None
+                for handle in handles:
+                    if handle != current_handle:
+                        new_handle = handle
+                        break
+
+                if new_handle:
+                    driver.switch_to.window(new_handle)
+                    new_page_url = driver.current_url
+                    print("새 창 URL:", new_page_url)
+
+                    # 필요하면 새 창 작업 후 닫기 가능
+                    driver.close()
+
+                    # 원래 창으로 돌아오기
+                    driver.switch_to.window(current_handle)
+                else:
+                    print("새 창을 찾을 수 없습니다.")
+                    new_page_url = None
+
+        else:
+            print(f"중복된 값 발견, 건너뜀: {value_text}")
+
+        row_index += 1
+
+    except Exception as e:
+        print(f"탐색 종료 또는 오류 발생: {e}")
+        break
+
+# 첫 번째 창으로 이동
+driver.switch_to.window(driver.window_handles[0])
+
+if new_page_url is not None:
+    # 알리 링크 입력(변환 전)
+    input_xpath = '입력창_xpath'  # 실제 XPath로 바꿔
+    input_element = wait.until(EC.element_to_be_clickable((By.XPATH, input_xpath)))
+    input_element.click()          # 클릭해서 포커스 맞추기
+    input_element.clear()          # 기존 내용 지우기 (필요시)
+    input_element.send_keys(new_page_url)
+
+    # 알리 링크 변환(클릭)
+    convert_button_xpath = '변환박스_xpath'  # 실제 XPath로 바꿔
+    convert_element = wait.until(EC.element_to_be_clickable((By.XPATH, convert_button_xpath)))
+    convert_element.click()
+else:
+    print("변환할 URL이 없습니다.")
+
+# 드라이버 종료
+driver.quit()
+
+# 테스트용 대기
+#wait.until(lambda d: False)  # 무한 대기 대신 필요한 대기 조건 넣기 or 삭제
+#코드 전체 멈추기
+
+# XPath로 버튼 클릭
+# xpath = '//*[@id="example-button"]'  # ← 클릭할 요소의 XPath로 바꿔
+# element = driver.find_element(By.XPATH, xpath)
+# element.click()
+
+# 한 번 클릭 할때는 이거 쓰기
